@@ -25,6 +25,16 @@ class Builder
     protected $columnAliases = array();
 
     /**
+     * @var array
+     */
+    protected $columnSearchData = array();
+
+    /**
+     * @var array
+     */
+    protected $columnExpressions = array();
+
+    /**
      * @var string
      */
     protected $indexColumn = '*';
@@ -90,7 +100,20 @@ class Builder
                         if (array_key_exists($column['data'], $this->columnAliases)) {
                             $column['data'] = $this->columnAliases[$column['data']];
                         }
-                        $orX->add($query->expr()->like($column['data'], ':search'));
+                        if (array_key_exists($column['data'], $this->columnExpressions) && is_callable($this->columnExpressions[$column['data']])) {
+                            $orX->add(call_user_func($this->columnExpressions[$column['data']], $query, $value));
+                        } else {
+                            $x = $column['data'];
+                            if (array_key_exists($column['data'], $this->columnSearchData)) {
+                                $y = ":search_{$i}";
+                                $v = $this->columnSearchData[$column['data']];
+                                $searchValue = (is_callable($v)) ? call_user_func($v, $value) : $value ;
+                                $query->setParameter("search_{$i}","%{$searchValue}%");
+                            } else {
+                                $y = ':search';
+                            }
+                            $orX->add($query->expr()->like($x, $y));
+                        }
                     }
                 }
                 if ($orX->count() >= 1) {
@@ -107,8 +130,20 @@ class Builder
                 if (array_key_exists($column['data'], $this->columnAliases)) {
                     $column['data'] = $this->columnAliases[$column['data']];
                 }
-                $andX->add($query->expr()->eq($column['data'], ":filter_{$i}"));
-                $query->setParameter("filter_{$i}", $value);
+                if (array_key_exists($column['data'], $this->columnExpressions) && is_callable($this->columnExpressions[$column['data']])) {
+                	$andX->add(call_user_func($this->columnExpressions[$column['data']], $query, $value));
+                } else {
+                    $x = $column['data'];
+                    $y = ":filter_{$i}";
+                    if (array_key_exists($column['data'], $this->columnSearchData)) {
+                        $v = $this->columnSearchData[$column['data']];
+                        $filterValue = (is_callable($v)) ? call_user_func($v, $value) : $value ;
+                    } else {
+                        $filterValue = $value;
+                    }
+                    $andX->add($query->expr()->eq($x, $y));
+                    $query->setParameter("filter_{$i}", $filterValue);
+                }
             }
             if ($andX->count() >= 1) {
                 $query->andWhere($andX);
@@ -193,5 +228,25 @@ class Builder
     {
         $this->requestParams = $requestParams;
         return $this;
+    }
+
+    /**
+     * @param array $columnSearchData
+     * @return static
+     */
+    public function withColumnSearchData($columnSearchData)
+    {
+    	$this->columnSearchData = $columnSearchData;
+    	return $this;
+    }
+
+    /**
+     * @param array $columnExpressions
+     * @return static
+     */
+    public function withColumnExpressions($columnExpressions)
+    {
+    	$this->columnExpressions = $columnExpressions;
+    	return $this;
     }
 }
