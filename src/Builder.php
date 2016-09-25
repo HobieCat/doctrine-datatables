@@ -51,7 +51,9 @@ class Builder
             $order = &$this->requestParams['order'];
             foreach ($order as $sort) {
                 $column = &$columns[intval($sort['column'])];
-                if (array_key_exists($column['data'], $this->columnAliases)) {
+                if (array_key_exists($column['name'], $this->columnAliases)) {
+                    $column['data'] = $this->columnAliases[$column['name']];
+                } else if (array_key_exists($column['data'], $this->columnAliases)) {
                     $column['data'] = $this->columnAliases[$column['data']];
                 }
                 $query->addOrderBy($column['data'], $sort['dir']);
@@ -87,7 +89,9 @@ class Builder
                 for ($i = 0; $i < $c; $i++) {
                     $column = &$columns[$i];
                     if ($column['searchable'] == 'true') {
-                        if (array_key_exists($column['data'], $this->columnAliases)) {
+                        if (array_key_exists($column['name'], $this->columnAliases)) {
+                            $column['data'] = $this->columnAliases[$column['name']];
+                        } else if (array_key_exists($column['data'], $this->columnAliases)) {
                             $column['data'] = $this->columnAliases[$column['data']];
                         }
                         $orX->add($query->expr()->like($column['data'], ':search'));
@@ -104,7 +108,9 @@ class Builder
             $column = &$columns[$i];
             $andX = $query->expr()->andX();
             if (($column['searchable'] == 'true') && ($value = trim($column['search']['value']))) {
-                if (array_key_exists($column['data'], $this->columnAliases)) {
+                if (array_key_exists($column['name'], $this->columnAliases)) {
+                    $column['data'] = $this->columnAliases[$column['name']];
+                } else if (array_key_exists($column['data'], $this->columnAliases)) {
                     $column['data'] = $this->columnAliases[$column['data']];
                 }
                 $andX->add($query->expr()->eq($column['data'], ":filter_{$i}"));
