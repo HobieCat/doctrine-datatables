@@ -69,7 +69,11 @@ class Builder
             }
         }
         // Fetch
-        return $query->execute()->fetchAll();
+        if ($query instanceof \Doctrine\ORM\QueryBuilder) {
+        	return $query->getQuery()->getArrayResult();
+        } else {
+            return $query->execute()->fetchAll();
+        }
     }
 
     /**
@@ -123,11 +127,19 @@ class Builder
      */
     public function getRecordsFiltered()
     {
-        return $this->getFilteredQuery()
-            ->resetQueryPart('select')
-            ->select("count({$this->indexColumn})")
-            ->execute()
-            ->fetchColumn(0);
+        if ($this->queryBuilder instanceof \Doctrine\ORM\QueryBuilder) {
+            return $this->getFilteredQuery()
+                ->resetDQLPart('select')
+                ->select("count({$this->indexColumn})")
+                ->getQuery()
+                ->getSingleScalarResult();
+        } else {
+            return $this->getFilteredQuery()
+                ->resetQueryPart('select')
+                ->select("count({$this->indexColumn})")
+                ->execute()
+                ->fetchColumn(0);
+        }
     }
 
     /**
@@ -136,10 +148,17 @@ class Builder
     public function getRecordsTotal()
     {
         $tmp = clone $this->queryBuilder;
-        return $tmp->resetQueryPart('select')
-            ->select("count({$this->indexColumn})")
-            ->execute()
-            ->fetchColumn(0);
+        if ($tmp instanceof \Doctrine\ORM\QueryBuilder) {
+            return $tmp->resetDQLPart('select')
+                ->select("count({$this->indexColumn})")
+                ->getQuery()
+                ->getSingleScalarResult(0);
+        } else {
+            return $tmp->resetQueryPart('select')
+                ->select("count({$this->indexColumn})")
+                ->execute()
+                ->fetchColumn(0);
+        }
     }
 
     /**
@@ -183,6 +202,16 @@ class Builder
     {
         $this->queryBuilder = $queryBuilder;
         return $this;
+    }
+
+    /**
+     * @param QueryBuilder $queryBuilder
+     * @return static
+     */
+    public function withORMQueryBuilder(\Doctrine\ORM\QueryBuilder $queryBuilder)
+    {
+    	$this->queryBuilder = $queryBuilder;
+    	return $this;
     }
 
     /**
