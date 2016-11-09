@@ -50,6 +50,11 @@ class Builder
     protected $requestParams;
 
     /**
+     * @var boolean
+     */
+    protected $countDistinct = false;
+
+    /**
      * @return array
      */
     public function getData()
@@ -171,13 +176,13 @@ class Builder
         if ($this->queryBuilder instanceof \Doctrine\ORM\QueryBuilder) {
             return $this->getFilteredQuery()
                 ->resetDQLPart('select')
-                ->select("count({$this->indexColumn})")
+                ->select($this->getCountStr())
                 ->getQuery()
                 ->getSingleScalarResult();
         } else {
             return $this->getFilteredQuery()
                 ->resetQueryPart('select')
-                ->select("count({$this->indexColumn})")
+                ->select($this->getCountStr())
                 ->execute()
                 ->fetchColumn(0);
         }
@@ -191,12 +196,12 @@ class Builder
         $tmp = clone $this->queryBuilder;
         if ($tmp instanceof \Doctrine\ORM\QueryBuilder) {
             return $tmp->resetDQLPart('select')
-                ->select("count({$this->indexColumn})")
+                ->select($this->getCountStr())
                 ->getQuery()
                 ->getSingleScalarResult(0);
         } else {
             return $tmp->resetQueryPart('select')
-                ->select("count({$this->indexColumn})")
+                ->select($this->getCountStr())
                 ->execute()
                 ->fetchColumn(0);
         }
@@ -283,5 +288,23 @@ class Builder
     {
     	$this->columnExpressions = $columnExpressions;
     	return $this;
+    }
+
+    /**
+     * @return static
+     */
+    public function withCountDistinct()
+    {
+    	$this->countDistinct = true;
+    	return $this;
+    }
+
+    private function getCountStr() {
+    	if ($this->countDistinct) {
+    		$countStr = sprintf("count(distinct(%s))", $this->indexColumn);
+    	} else {
+    		$countStr = sprintf("count(%s)", $this->indexColumn);
+    	}
+    	return $countStr;
     }
 }
