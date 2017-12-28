@@ -174,14 +174,18 @@ class Builder
     public function getRecordsFiltered()
     {
         if ($this->queryBuilder instanceof \Doctrine\ORM\QueryBuilder) {
-            return array_sum(self::flattenRecursive($this->getFilteredQuery()
+            return (int) $this->getFilteredQuery()
                 ->resetDQLPart('select')
+                ->resetDQLPart('groupBy')
+            	->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->getQuery()
-                ->getArrayResult()));
+                ->getSingleScalarResult();
         } else {
-            return $this->getFilteredQuery()
+            return (int) $this->getFilteredQuery()
                 ->resetQueryPart('select')
+                ->resetDQLPart('groupBy')
+            	->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->execute()
                 ->fetchColumn(0);
@@ -195,29 +199,20 @@ class Builder
     {
         $tmp = clone $this->queryBuilder;
         if ($tmp instanceof \Doctrine\ORM\QueryBuilder) {
-            return array_sum(self::flattenRecursive($tmp->resetDQLPart('select')
+            return (int) $tmp->resetDQLPart('select')
+                ->resetDQLPart('groupBy')
+            	->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->getQuery()
-                ->getArrayResult()));
+                ->getSingleScalarResult();
         } else {
-            return $tmp->resetQueryPart('select')
+            return (int) $tmp->resetQueryPart('select')
+                ->resetDQLPart('groupBy')
+            	->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->execute()
                 ->fetchColumn(0);
         }
-    }
-    
-    /**
-     * @param array $result
-     * @return array
-     */
-    private static function flattenRecursive($result) {
-        $ret = array();
-        foreach ($result as $key=>$v) {
-            if (is_array($v)) $ret = array_merge($ret, self::flattenRecursive($v));
-            else $ret[$key] = $v;
-        }
-        return $ret;
     }
 
     /**
