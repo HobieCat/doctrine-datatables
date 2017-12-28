@@ -174,11 +174,11 @@ class Builder
     public function getRecordsFiltered()
     {
         if ($this->queryBuilder instanceof \Doctrine\ORM\QueryBuilder) {
-            return $this->getFilteredQuery()
+            return array_sum(self::flattenRecursive($this->getFilteredQuery()
                 ->resetDQLPart('select')
                 ->select($this->getCountStr())
                 ->getQuery()
-                ->getSingleScalarResult();
+                ->getArrayResult()));
         } else {
             return $this->getFilteredQuery()
                 ->resetQueryPart('select')
@@ -195,16 +195,29 @@ class Builder
     {
         $tmp = clone $this->queryBuilder;
         if ($tmp instanceof \Doctrine\ORM\QueryBuilder) {
-            return $tmp->resetDQLPart('select')
+            return array_sum(self::flattenRecursive($tmp->resetDQLPart('select')
                 ->select($this->getCountStr())
                 ->getQuery()
-                ->getSingleScalarResult(0);
+                ->getArrayResult()));
         } else {
             return $tmp->resetQueryPart('select')
                 ->select($this->getCountStr())
                 ->execute()
                 ->fetchColumn(0);
         }
+    }
+    
+    /**
+     * @param array $result
+     * @return array
+     */
+    private static function flattenRecursive($result) {
+        $ret = array();
+        foreach ($result as $key=>$v) {
+            if (is_array($v)) $ret = array_merge($ret, self::flattenRecursive($v));
+            else $ret[$key] = $v;
+        }
+        return $ret;
     }
 
     /**
