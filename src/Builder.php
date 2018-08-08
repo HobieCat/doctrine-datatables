@@ -12,6 +12,7 @@
 namespace Doctrine\DataTables;
 
 use Doctrine\DBAL\Query\QueryBuilder;
+use Doctrine\ORM\QueryBuilder as ORMQueryBuilder;
 
 /**
  * Class Builder
@@ -37,10 +38,15 @@ class Builder
     /**
      * @var string
      */
+    protected $columnField = 'data'; // or 'name'
+
+    /**
+     * @var string
+     */
     protected $indexColumn = '*';
 
     /**
-     * @var QueryBuilder
+     * @var QueryBuilder|ORMQueryBuilder
      */
     protected $queryBuilder;
 
@@ -67,11 +73,11 @@ class Builder
             foreach ($order as $sort) {
                 $column = &$columns[intval($sort['column'])];
                 if (array_key_exists($column['name'], $this->columnAliases)) {
-                    $column['data'] = $this->columnAliases[$column['name']];
-                } else if (array_key_exists($column['data'], $this->columnAliases)) {
-                    $column['data'] = $this->columnAliases[$column['data']];
+                    $column[$this->columnField] = $this->columnAliases[$column['name']];
+                } else if (array_key_exists($column[$this->columnField], $this->columnAliases)) {
+                    $column[$this->columnField] = $this->columnAliases[$column[$this->columnField]];
                 }
-                $query->addOrderBy($column['data'], $sort['dir']);
+                $query->addOrderBy($column[$this->columnField], $sort['dir']);
             }
         }
         // Offset
@@ -94,7 +100,7 @@ class Builder
     }
 
     /**
-     * @return QueryBuilder
+     * @return QueryBuilder|ORMQueryBuilder
      */
     public function getFilteredQuery()
     {
@@ -109,17 +115,17 @@ class Builder
                     $column = &$columns[$i];
                     if ($column['searchable'] == 'true') {
                         if (array_key_exists($column['name'], $this->columnAliases)) {
-                            $column['data'] = $this->columnAliases[$column['name']];
-                        } else if (array_key_exists($column['data'], $this->columnAliases)) {
-                            $column['data'] = $this->columnAliases[$column['data']];
+                            $column[$this->columnField] = $this->columnAliases[$column['name']];
+                        } else if (array_key_exists($column[$this->columnField], $this->columnAliases)) {
+                            $column[$this->columnField] = $this->columnAliases[$column[$this->columnField]];
                         }
-                        if (array_key_exists($column['data'], $this->columnExpressions) && is_callable($this->columnExpressions[$column['data']])) {
-                            $orX->add(call_user_func($this->columnExpressions[$column['data']], $query, $value));
+                        if (array_key_exists($column[$this->columnField], $this->columnExpressions) && is_callable($this->columnExpressions[$column[$this->columnField]])) {
+                            $orX->add(call_user_func($this->columnExpressions[$column[$this->columnField]], $query, $value));
                         } else {
-                            $x = $column['data'];
-                            if (array_key_exists($column['data'], $this->columnSearchData)) {
+                            $x = $column[$this->columnField];
+                            if (array_key_exists($column[$this->columnField], $this->columnSearchData)) {
                                 $y = ":search_{$i}";
-                                $v = $this->columnSearchData[$column['data']];
+                                $v = $this->columnSearchData[$column[$this->columnField]];
                                 $searchValue = (is_callable($v)) ? call_user_func($v, $value) : $value ;
                                 $query->setParameter("search_{$i}","%{$searchValue}%");
                             } else {
@@ -141,20 +147,40 @@ class Builder
             $andX = $query->expr()->andX();
             if (($column['searchable'] == 'true') && ($value = trim($column['search']['value']))) {
                 if (array_key_exists($column['name'], $this->columnAliases)) {
-                    $column['data'] = $this->columnAliases[$column['name']];
-                } else if (array_key_exists($column['data'], $this->columnAliases)) {
-                    $column['data'] = $this->columnAliases[$column['data']];
+                    $column[$this->columnField] = $this->columnAliases[$column['name']];
+                } else if (array_key_exists($column[$this->columnField], $this->columnAliases)) {
+                    $column[$this->columnField] = $this->columnAliases[$column[$this->columnField]];
                 }
-                if (array_key_exists($column['data'], $this->columnExpressions) && is_callable($this->columnExpressions[$column['data']])) {
-                	$andX->add(call_user_func($this->columnExpressions[$column['data']], $query, $value));
+                if (array_key_exists($column[$this->columnField], $this->columnExpressions) && is_callable($this->columnExpressions[$column[$this->columnField]])) {
+                	$andX->add(call_user_func($this->columnExpressions[$column[$this->columnField]], $query, $value));
                 } else {
-                    $x = $column['data'];
+                    $x = $column[$this->columnField];
                     $y = ":filter_{$i}";
-                    if (array_key_exists($column['data'], $this->columnSearchData)) {
-                        $v = $this->columnSearchData[$column['data']];
+                    if (array_key_exists($column[$this->columnField], $this->columnSearchData)) {
+                        $v = $this->columnSearchData[$column[$this->columnField]];
                         $filterValue = (is_callable($v)) ? call_user_func($v, $value) : $value ;
                     } else {
                         $filterValue = $value;
+                    }
+                    $operator = preg_match('~^\[(?<operator>[=!%<>]+)\].*$~', $filterValue, $matches) ? $matches['operator'] : '=';
+                    switch ($operator) {
+                        case '!=': // Not equals; usage: [!=]search_term
+                            $andX->add($query->expr()->neq($x, $y));
+                            break;
+                        case '%': // Like; usage: [%]search_term
+                            $andX->add($query->expr()->like($x, $y));
+                            $filterValue = "%{$filterValue}%";
+                            break;
+                        case '<': // Less than; usage: [>]search_term
+                            $andX->add($query->expr()->lt($x, $y));
+                            break;
+                        case '>': // Greater than; usage: [<]search_term
+                            $andX->add($query->expr()->gt($x, $y));
+                            break;
+                        case '=': // Equals (default); usage: [=]search_term
+                        default:
+                            $andX->add($query->expr()->eq($x, $y));
+                            break;
                     }
                     $andX->add($query->expr()->eq($x, $y));
                     $query->setParameter("filter_{$i}", $filterValue);
@@ -173,19 +199,18 @@ class Builder
      */
     public function getRecordsFiltered()
     {
-        if ($this->queryBuilder instanceof \Doctrine\ORM\QueryBuilder) {
-            return (int) $this->getFilteredQuery()
-                ->resetDQLPart('select')
+        $query = $this->getFilteredQuery();
+        if ($query instanceof ORMQueryBuilder) {
+            return (int) $query->resetDQLPart('select')
                 ->resetDQLPart('groupBy')
-            	->resetDQLPart('having')
+                ->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->getQuery()
                 ->getSingleScalarResult();
         } else {
-            return (int) $this->getFilteredQuery()
-                ->resetQueryPart('select')
+            return (int) $query->resetQueryPart('select')
                 ->resetDQLPart('groupBy')
-            	->resetDQLPart('having')
+                ->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->execute()
                 ->fetchColumn(0);
@@ -197,16 +222,16 @@ class Builder
      */
     public function getRecordsTotal()
     {
-        $tmp = clone $this->queryBuilder;
-        if ($tmp instanceof \Doctrine\ORM\QueryBuilder) {
-            return (int) $tmp->resetDQLPart('select')
+        $query = clone $this->queryBuilder;
+        if ($query instanceof ORMQueryBuilder) {
+            return (int) $query->resetDQLPart('select')
                 ->resetDQLPart('groupBy')
             	->resetDQLPart('having')
                 ->select($this->getCountStr())
                 ->getQuery()
                 ->getSingleScalarResult();
         } else {
-            return (int) $tmp->resetQueryPart('select')
+            return (int) $query->resetQueryPart('select')
                 ->resetDQLPart('groupBy')
             	->resetDQLPart('having')
                 ->select($this->getCountStr())
@@ -249,23 +274,23 @@ class Builder
     }
 
     /**
-     * @param QueryBuilder $queryBuilder
+     * @param string $columnField
      * @return static
      */
-    public function withQueryBuilder(QueryBuilder $queryBuilder)
+    public function withColumnField($columnField)
     {
-        $this->queryBuilder = $queryBuilder;
+        $this->columnField = $columnField;
         return $this;
     }
 
     /**
-     * @param QueryBuilder $queryBuilder
+     * @param QueryBuilder|ORMQueryBuilder $queryBuilder
      * @return static
      */
-    public function withORMQueryBuilder(\Doctrine\ORM\QueryBuilder $queryBuilder)
+    public function withQueryBuilder($queryBuilder)
     {
-    	$this->queryBuilder = $queryBuilder;
-    	return $this;
+        $this->queryBuilder = $queryBuilder;
+        return $this;
     }
 
     /**
